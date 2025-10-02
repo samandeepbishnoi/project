@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, LogOut, Save, X } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, LogOut, Save, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface Product {
