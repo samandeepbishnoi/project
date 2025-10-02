@@ -53,6 +53,7 @@ const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   name: { type: String, required: true },
+  role: { type: String, enum: ['main', 'pending', 'approved'], default: 'pending' },
 }, { timestamps: true });
 
 const Admin = mongoose.model('Admin', adminSchema);
@@ -102,6 +103,27 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Main admin middleware
+const authenticateMainAdmin = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    if (user.role !== 'main') {
+      return res.status(403).json({ message: 'Access denied. Main admin privileges required.' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Routes
 
 // Admin Authentication
@@ -119,16 +141,17 @@ app.post('/api/admin/register', async (req, res) => {
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create new admin
+    // Create new admin with pending status
     const admin = new Admin({
       email,
       password: hashedPassword,
       name,
+      role: 'pending',
     });
 
     await admin.save();
 
-    res.status(201).json({ message: 'Admin registered successfully' });
+    res.status(201).json({ message: 'Registration submitted. Please wait for approval from the main admin.' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -144,6 +167,11 @@ app.post('/api/admin/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    // Check if admin is approved
+    if (admin.role === 'pending') {
+      return res.status(403).json({ message: 'Your account is pending approval. Please wait for the main admin to approve your registration.' });
+    }
+
     // Check password
     const isPasswordValid = await bcrypt.compare(password, admin.password);
     if (!isPasswordValid) {
@@ -152,7 +180,7 @@ app.post('/api/admin/login', async (req, res) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { adminId: admin._id, email: admin.email },
+      { adminId: admin._id, email: admin.email, role: admin.role },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
@@ -163,6 +191,7 @@ app.post('/api/admin/login', async (req, res) => {
         id: admin._id,
         email: admin.email,
         name: admin.name,
+        role: admin.role,
       },
     });
   } catch (error) {
@@ -304,8 +333,64 @@ app.get('/api/filters', async (req, res) => {
   try {
     const categories = await Product.distinct('category');
     const tags = await Product.distinct('tags');
-    
+
     res.json({ categories, tags });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Admin Management Routes
+
+// Get pending admins (Main admin only)
+app.get('/api/admin/pending', authenticateMainAdmin, async (req, res) => {
+  try {
+    const pendingAdmins = await Admin.find({ role: 'pending' }).select('-password');
+    res.json(pendingAdmins);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all admins (Main admin only)
+app.get('/api/admin/all', authenticateMainAdmin, async (req, res) => {
+  try {
+    const admins = await Admin.find().select('-password');
+    res.json(admins);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Approve admin (Main admin only)
+app.put('/api/admin/approve/:id', authenticateMainAdmin, async (req, res) => {
+  try {
+    const admin = await Admin.findByIdAndUpdate(
+      req.params.id,
+      { role: 'approved' },
+      { new: true }
+    ).select('-password');
+
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    res.json({ message: 'Admin approved successfully', admin });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Reject/Delete pending admin (Main admin only)
+app.delete('/api/admin/reject/:id', authenticateMainAdmin, async (req, res) => {
+  try {
+    const admin = await Admin.findByIdAndDelete(req.params.id);
+
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    res.json({ message: 'Admin registration rejected and removed' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -325,10 +410,11 @@ const createDefaultAdmin = async () => {
       const defaultAdmin = new Admin({
         email: 'admin@elegance.com',
         password: hashedPassword,
-        name: 'Admin User',
+        name: 'Main Admin',
+        role: 'main',
       });
       await defaultAdmin.save();
-      console.log('Default admin user created: admin@elegance.com / admin123');
+      console.log('Default main admin user created: admin@elegance.com / admin123');
     }
   } catch (error) {
     console.error('Error creating default admin:', error);

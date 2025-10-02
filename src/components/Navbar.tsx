@@ -30,6 +30,12 @@ const Navbar: React.FC = () => {
               Home
             </Link>
             <Link
+              to="/catalog"
+              className="text-gray-700 hover:text-gold-600 transition-colors duration-200"
+            >
+              Catalog
+            </Link>
+            <Link
               to="/wishlist"
               className="relative text-gray-700 hover:text-gold-600 transition-colors duration-200"
             >
@@ -74,6 +80,13 @@ const Navbar: React.FC = () => {
                 onClick={() => setIsOpen(false)}
               >
                 Home
+              </Link>
+              <Link
+                to="/catalog"
+                className="block px-3 py-2 text-gray-700 hover:text-gold-600 transition-colors duration-200"
+                onClick={() => setIsOpen(false)}
+              >
+                Catalog
               </Link>
               <Link
                 to="/wishlist"

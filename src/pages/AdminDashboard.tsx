@@ -14,6 +14,14 @@ interface Product {
   inStock: boolean;
 }
 
+interface Admin {
+  _id: string;
+  name: string;
+  email: string;
+  role: 'main' | 'pending' | 'approved';
+  createdAt: string;
+}
+
 const AdminDashboard: React.FC = () => {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
@@ -29,15 +37,26 @@ const AdminDashboard: React.FC = () => {
     description: '',
     inStock: true,
   });
+  const [pendingAdmins, setPendingAdmins] = useState<Admin[]>([]);
+  const [allAdmins, setAllAdmins] = useState<Admin[]>([]);
+  const [showAdminManagement, setShowAdminManagement] = useState(false);
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
 
   useEffect(() => {
     // Check for persisted token in localStorage
     const persistedToken = localStorage.getItem('adminToken');
+    const persistedUser = localStorage.getItem('adminUser');
+
     if (!auth.isAuthenticated && !persistedToken) {
       navigate('/admin/login');
       return;
+    }
+
+    const user = auth.user || (persistedUser ? JSON.parse(persistedUser) : null);
+    if (user && user.role === 'main') {
+      setIsMainAdmin(true);
     }
 
     // Load products from backend
@@ -59,7 +78,42 @@ const AdminDashboard: React.FC = () => {
         alert('Error fetching products: ' + error.message);
       }
     };
+
+    const fetchAdmins = async () => {
+      if (user && user.role === 'main') {
+        try {
+          const [pendingRes, allRes] = await Promise.all([
+            fetch(`${backendUrl}/api/admin/pending`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${auth.token || persistedToken}`,
+              },
+            }),
+            fetch(`${backendUrl}/api/admin/all`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${auth.token || persistedToken}`,
+              },
+            }),
+          ]);
+
+          if (pendingRes.ok) {
+            const pending = await pendingRes.json();
+            setPendingAdmins(pending);
+          }
+
+          if (allRes.ok) {
+            const all = await allRes.json();
+            setAllAdmins(all);
+          }
+        } catch (error: any) {
+          console.error('Error fetching admins:', error);
+        }
+      }
+    };
+
     fetchProducts();
+    fetchAdmins();
   }, [auth.isAuthenticated, navigate]);
 
   const handleLogout = () => {
@@ -384,7 +438,165 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Products Table */}
+        {/* Admin Management Section */}
+        {isMainAdmin && (
+          <div className="mb-8">
+            <button
+              onClick={() => setShowAdminManagement(!showAdminManagement)}
+              className="mb-4 bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors"
+            >
+              {showAdminManagement ? 'Hide Admin Management' : 'Manage Admins'}
+              {pendingAdmins.length > 0 && (
+                <span className="ml-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs">
+                  {pendingAdmins.length}
+                </span>
+              )}
+            </button>
+
+            {showAdminManagement && (
+              <div className="space-y-6">
+                {/* Pending Admins */}
+                {pendingAdmins.length > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                      Pending Admin Approvals
+                      <span className="ml-2 bg-yellow-500 text-white px-2 py-1 rounded-full text-sm">
+                        {pendingAdmins.length}
+                      </span>
+                    </h3>
+                    <div className="space-y-4">
+                      {pendingAdmins.map((admin) => (
+                        <div
+                          key={admin._id}
+                          className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="font-semibold text-gray-900">{admin.name}</p>
+                            <p className="text-sm text-gray-600">{admin.email}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Registered: {new Date(admin.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${backendUrl}/api/admin/approve/${admin._id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${auth.token}`,
+                                    },
+                                  });
+                                  if (res.ok) {
+                                    setPendingAdmins(prev => prev.filter(a => a._id !== admin._id));
+                                    const updated = await res.json();
+                                    setAllAdmins(prev => [...prev.filter(a => a._id !== admin._id), updated.admin]);
+                                    alert(`${admin.name} has been approved`);
+                                  } else {
+                                    const error = await res.json();
+                                    alert(error.message || 'Failed to approve admin');
+                                  }
+                                } catch (error: any) {
+                                  alert('Error approving admin: ' + error.message);
+                                }
+                              }}
+                              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to reject ${admin.name}'s registration?`)) {
+                                  try {
+                                    const res = await fetch(`${backendUrl}/api/admin/reject/${admin._id}`, {
+                                      method: 'DELETE',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${auth.token}`,
+                                      },
+                                    });
+                                    if (res.ok) {
+                                      setPendingAdmins(prev => prev.filter(a => a._id !== admin._id));
+                                      alert(`${admin.name}'s registration has been rejected`);
+                                    } else {
+                                      const error = await res.json();
+                                      alert(error.message || 'Failed to reject admin');
+                                    }
+                                  } catch (error: any) {
+                                    alert('Error rejecting admin: ' + error.message);
+                                  }
+                                }
+                              }}
+                              className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* All Admins List */}
+                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-semibold text-gray-900">All Administrators</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Email
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Role
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registered
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {allAdmins.map((admin) => (
+                          <tr key={admin._id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {admin.name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {admin.email}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                admin.role === 'main'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : admin.role === 'approved'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {admin.role === 'main' ? 'Main Admin' : admin.role === 'approved' ? 'Approved' : 'Pending'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(admin.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* Products Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">Products</h2>
