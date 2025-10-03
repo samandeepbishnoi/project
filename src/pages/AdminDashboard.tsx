@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CreditCard as Edit2, Trash2, LogOut, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, LogOut, Save, X, Power } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/StoreContext';
 
 interface Product {
   _id: string;
@@ -41,6 +42,8 @@ const AdminDashboard: React.FC = () => {
   const [allAdmins, setAllAdmins] = useState<Admin[]>([]);
   const [showAdminManagement, setShowAdminManagement] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
+  const { isOnline, setStoreStatus } = useStore();
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
 
@@ -234,42 +237,101 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleStoreStatusToggle = async () => {
+    if (!window.confirm(`Are you sure you want to set the store ${isOnline ? 'OFFLINE' : 'ONLINE'}?`)) {
+      return;
+    }
+
+    setUpdatingStatus(true);
+    try {
+      await setStoreStatus(isOnline ? 'offline' : 'online');
+      alert(`Store is now ${isOnline ? 'OFFLINE' : 'ONLINE'}`);
+    } catch (error: any) {
+      alert('Failed to update store status: ' + error.message);
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleDeleteAdmin = async (adminId: string, adminName: string) => {
+    if (!window.confirm(`Are you sure you want to delete ${adminName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${backendUrl}/api/admin/${adminId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.token}`,
+        },
+      });
+
+      if (res.ok) {
+        setAllAdmins(prev => prev.filter(a => a._id !== adminId));
+        setPendingAdmins(prev => prev.filter(a => a._id !== adminId));
+        alert(`${adminName} has been deleted`);
+      } else {
+        const error = await res.json();
+        alert(error.message || 'Failed to delete admin');
+      }
+    } catch (error: any) {
+      alert('Error deleting admin: ' + error.message);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-4 gap-4">
             <div>
-              <h1 className="text-2xl font-serif font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600">Manage your jewelry collection</p>
+              <h1 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Manage your jewelry collection</p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center text-gray-600 hover:text-red-600 transition-colors"
-            >
-              <LogOut className="h-5 w-5 mr-2" />
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              {isMainAdmin && (
+                <button
+                  onClick={handleStoreStatusToggle}
+                  disabled={updatingStatus}
+                  className={`flex items-center px-4 py-2 rounded-lg font-medium transition-all ${
+                    isOnline
+                      ? 'bg-green-500 hover:bg-green-600 text-white'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Store: {isOnline ? 'Online' : 'Offline'}
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="flex items-center text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+              >
+                <LogOut className="h-5 w-5 mr-2" />
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Total Products</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Total Products</h3>
             <p className="text-3xl font-bold text-gold-600">{products.length}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900">In Stock</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">In Stock</h3>
             <p className="text-3xl font-bold text-green-600">
               {products.filter(p => p.inStock).length}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Out of Stock</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Out of Stock</h3>
             <p className="text-3xl font-bold text-red-600">
               {products.filter(p => !p.inStock).length}
             </p>
@@ -540,53 +602,71 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {/* All Admins List */}
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-200">
-                    <h3 className="text-xl font-semibold text-gray-900">All Administrators</h3>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">All Administrators</h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             Name
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             Email
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             Role
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             Registered
+                          </th>
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {allAdmins.map((admin) => (
-                          <tr key={admin._id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {admin.name}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              {admin.email}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                admin.role === 'main'
-                                  ? 'bg-purple-100 text-purple-800'
-                                  : admin.role === 'approved'
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {admin.role === 'main' ? 'Main Admin' : admin.role === 'approved' ? 'Approved' : 'Pending'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              {new Date(admin.createdAt).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        ))}
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {allAdmins.map((admin) => {
+                          const currentUserId = auth.user?.id || JSON.parse(localStorage.getItem('adminUser') || '{}').id;
+                          const isCurrentUser = admin._id === currentUserId;
+
+                          return (
+                            <tr key={admin._id}>
+                              <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                {admin.name}
+                              </td>
+                              <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                                {admin.email}
+                              </td>
+                              <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  admin.role === 'main'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                                    : admin.role === 'approved'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                }`}>
+                                  {admin.role === 'main' ? 'Main Admin' : admin.role === 'approved' ? 'Approved' : 'Pending'}
+                                </span>
+                              </td>
+                              <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                                {new Date(admin.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
+                                {admin.role !== 'main' && !isCurrentUser && (
+                                  <button
+                                    onClick={() => handleDeleteAdmin(admin._id, admin.name)}
+                                    className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 transition-colors"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

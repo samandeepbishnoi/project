@@ -14,33 +14,39 @@ import AdminDashboard from './pages/AdminDashboard';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { StoreProvider } from './context/StoreContext';
 
 function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <WishlistProvider>
-          <Router>
-            <div className="min-h-screen bg-gray-50">
-              <Navbar />
-              <main>
-                <Routes>
-                  <Route path="/" element={<Landing />} />
-                  <Route path="/catalog" element={<Homepage />} />
-                  <Route path="/product/:id" element={<ProductDetail />} />
-                  <Route path="/cart" element={<Cart />} />
-                  <Route path="/wishlist" element={<Wishlist />} />
-                  <Route path="/checkout" element={<Checkout />} />
-                  <Route path="/admin/login" element={<AdminLogin />} />
-                  <Route path="/admin/register" element={<AdminRegister />} />
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                </Routes>
-              </main>
-              <Footer />
-            </div>
-          </Router>
-        </WishlistProvider>
-      </CartProvider>
+      <ThemeProvider>
+        <StoreProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <Router>
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+                  <Navbar />
+                  <main>
+                    <Routes>
+                      <Route path="/" element={<Landing />} />
+                      <Route path="/catalog" element={<Homepage />} />
+                      <Route path="/product/:id" element={<ProductDetail />} />
+                      <Route path="/cart" element={<Cart />} />
+                      <Route path="/wishlist" element={<Wishlist />} />
+                      <Route path="/checkout" element={<Checkout />} />
+                      <Route path="/admin/login" element={<AdminLogin />} />
+                      <Route path="/admin/register" element={<AdminRegister />} />
+                      <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                    </Routes>
+                  </main>
+                  <Footer />
+                </div>
+              </Router>
+            </WishlistProvider>
+          </CartProvider>
+        </StoreProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

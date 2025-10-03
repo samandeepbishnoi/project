@@ -58,6 +58,14 @@ const adminSchema = new mongoose.Schema({
 
 const Admin = mongoose.model('Admin', adminSchema);
 
+// Store Status Schema
+const storeStatusSchema = new mongoose.Schema({
+  status: { type: String, enum: ['online', 'offline'], default: 'online' },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const StoreStatus = mongoose.model('StoreStatus', storeStatusSchema);
+
 // Multer configuration for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -391,6 +399,73 @@ app.delete('/api/admin/reject/:id', authenticateMainAdmin, async (req, res) => {
     }
 
     res.json({ message: 'Admin registration rejected and removed' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete any admin (Main admin only, cannot delete self)
+app.delete('/api/admin/:id', authenticateMainAdmin, async (req, res) => {
+  try {
+    const targetAdmin = await Admin.findById(req.params.id);
+
+    if (!targetAdmin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    if (targetAdmin._id.toString() === req.user.adminId) {
+      return res.status(400).json({ message: 'You cannot delete your own account' });
+    }
+
+    if (targetAdmin.role === 'main') {
+      return res.status(403).json({ message: 'Cannot delete main admin account' });
+    }
+
+    await Admin.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Admin deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Store Status Routes
+
+// Get store status (Public)
+app.get('/api/store/status', async (req, res) => {
+  try {
+    let storeStatus = await StoreStatus.findOne();
+
+    if (!storeStatus) {
+      storeStatus = new StoreStatus({ status: 'online' });
+      await storeStatus.save();
+    }
+
+    res.json({ status: storeStatus.status, updatedAt: storeStatus.updatedAt });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update store status (Main admin only)
+app.put('/api/store/status', authenticateMainAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status || !['online', 'offline'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be "online" or "offline"' });
+    }
+
+    let storeStatus = await StoreStatus.findOne();
+
+    if (!storeStatus) {
+      storeStatus = new StoreStatus({ status });
+    } else {
+      storeStatus.status = status;
+      storeStatus.updatedAt = new Date();
+    }
+
+    await storeStatus.save();
+    res.json({ message: 'Store status updated successfully', status: storeStatus.status });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
